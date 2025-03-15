@@ -1,0 +1,37 @@
+{
+    "manifest_version": 2,
+    "name": "ERPNext Developer Suite",
+    "version": "1.1",
+    "description": "Tools for ERPNext developers: stock analysis, workflows, reports, and schema diff.",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "identity",
+        "webRequest",
+        "<all_urls>"
+    ],
+    "browser_action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon16.png",
+            "48": "icon48.png",
+            "128": "icon128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": ["*://*/app/*"],
+            "js": ["content.js"]
+        }
+    ],
+    "background": {
+        "scripts": ["background.js"],
+        "persistent": false
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "{f64c5d33-7adf-4c42-bcee-739f7c6c3e86}",
+            "strict_min_version": "57.0"
+        }
+    }
+}

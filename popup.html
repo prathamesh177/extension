@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ERPNext Dev Suite</title>
+    <style>
+        body { width: 400px; padding: 10px; font-family: Arial, sans-serif; }
+        .button { padding: 8px; margin: 5px; background-color: #008CBA; color: white; border: none; cursor: pointer; }
+        .section { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h3>ERPNext Developer Suite</h3>
+    
+    <div class="section">
+        <button id="erpStock" class="button">Stock Analyzer</button>
+        <button id="erpWorkflow" class="button">Workflow Visualizer</button>
+        <button id="erpReport" class="button">Report Generator</button>
+    </div>
+    
+    <div class="section">
+        <button id="schemaDiff" class="button">Schema Diff</button>
+    </div>
+    
+    <div id="result"></div>
+    <script src="popup.js"></script>
+</body>
+</html>
