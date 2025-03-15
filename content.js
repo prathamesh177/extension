@@ -59,6 +59,8 @@ browser.runtime.onMessage.addListener(function(message, sender, sendResponse) {
                 for (let frame of frames) {
                     if (checkFrappeInFrame(frame)) {
                         window.frappe = frame.frappe;
+                        // Initialize developer tools
+                        initDevTools(frame.frappe);
                         console.log("ERPNext detected:", Object.keys(window.frappe));
                         resolve(true);
                         return;
@@ -95,6 +97,48 @@ browser.runtime.onMessage.addListener(function(message, sender, sendResponse) {
                 console.log("Waiting for page load");
             }
         });
+    }
+
+    // Initialize developer tools and monitoring
+    function initDevTools(frappe) {
+        // Setup performance monitoring
+        window._frappeDevTools = {
+            apiCalls: [],
+            events: [],
+            perfMetrics: {
+                pageLoad: performance.now(),
+                apiLatency: {}
+            }
+        };
+
+        // Monitor API calls
+        const originalCall = frappe.call;
+        frappe.call = function(opts) {
+            const startTime = performance.now();
+            const callId = Date.now();
+            window._frappeDevTools.apiCalls.push({
+                id: callId,
+                method: opts.method,
+                args: opts.args,
+                timestamp: new Date().toISOString()
+            });
+
+            return originalCall.apply(this, arguments).then(result => {
+                window._frappeDevTools.apiLatency[callId] = performance.now() - startTime;
+                return result;
+            });
+        };
+
+        // Monitor Frappe events
+        const originalTrigger = frappe.event_hub.trigger;
+        frappe.event_hub.trigger = function(event, data) {
+            window._frappeDevTools.events.push({
+                event,
+                data,
+                timestamp: new Date().toISOString()
+            });
+            return originalTrigger.apply(this, arguments);
+        };
     }
 
     async function handleERPNextAction(actionFn) {
@@ -174,14 +218,99 @@ browser.runtime.onMessage.addListener(function(message, sender, sendResponse) {
         return true;
     }
 
+    if (message.action === "inspectDocType") {
+        handleERPNextAction(() => {
+            const doctype = message.doctype || frappe.boot?.sysdefaults?.doctype;
+            if (!doctype) {
+                sendResponse({result: "No DocType specified"});
+                return;
+            }
+
+            browser.runtime.sendMessage({
+                action: "apiCall",
+                url: `${location.origin}/api/method/frappe.desk.form.load.getdoctype`,
+                data: {
+                    doctype: doctype,
+                    with_parent: 1
+                },
+                token: frappe.csrf_token
+            }).then(response => {
+                if (response.success && response.data?.docs) {
+                    const doc = response.data.docs[0];
+                    const analysis = {
+                        fields: doc.fields.length,
+                        mandatoryFields: doc.fields.filter(f => f.reqd).length,
+                        linkedDocTypes: doc.fields.filter(f => f.fieldtype === 'Link').map(f => f.options),
+                        permissions: doc.permissions,
+                        workflows: frappe.boot?.workflow_states?.[doctype] || []
+                    };
+                    sendResponse({
+                        result: `DocType Analysis (${doctype}):<br>${JSON.stringify(analysis, null, 2)}`
+                    });
+                } else {
+                    sendResponse({
+                        result: `Error: ${response.error || 'Failed to load DocType'}`
+                    });
+                }
+            });
+            return true;
+        });
+        return true;
+    }
+
+    if (message.action === "debugConsole") {
+        handleERPNextAction(() => {
+            const devTools = window._frappeDevTools || {};
+            const summary = {
+                recentApiCalls: devTools.apiCalls?.slice(-5) || [],
+                recentEvents: devTools.events?.slice(-5) || [],
+                performance: {
+                    pageLoadTime: devTools.perfMetrics?.pageLoad,
+                    averageApiLatency: Object.values(devTools.apiLatency || {}).reduce((a, b) => a + b, 0) / 
+                        (Object.values(devTools.apiLatency || {}).length || 1)
+                }
+            };
+            sendResponse({
+                result: `Debug Console Summary:<br>${JSON.stringify(summary, null, 2)}`
+            });
+        });
+        return true;
+    }
+
+    if (message.action === "apiExplorer") {
+        handleERPNextAction(() => {
+            const commonApis = [
+                {method: 'frappe.client.get_list', description: 'Get DocType List'},
+                {method: 'frappe.client.get', description: 'Get Single Doc'},
+                {method: 'frappe.desk.reportview.get', description: 'Get Report View'},
+                {method: 'frappe.desk.search.search_link', description: 'Search Link Field'}
+            ];
+
+            const recentCalls = window._frappeDevTools?.apiCalls || [];
+            sendResponse({
+                result: `API Explorer:<br>Common APIs:<br>${JSON.stringify(commonApis, null, 2)}<br><br>` +
+                        `Recent API Calls:<br>${JSON.stringify(recentCalls, null, 2)}`
+            });
+        });
+        return true;
+    }
+
     if (message.action === "schemaDiff") {
         handleERPNextAction(() => {
-            const currentSchema = JSON.stringify(frappe.meta?.docfield_map || {});
+            const currentSchema = {
+                docTypes: Object.keys(frappe.meta?.docfield_map || {}),
+                customFields: frappe.boot?.custom_fields || {},
+                propertySetters: frappe.boot?.property_setters || {},
+                customScripts: frappe.boot?.custom_scripts || {}
+            };
+
             browser.storage.local.get(['prevSchema']).then(result => {
-                const prev = result.prevSchema || '{}';
-                const diff = compareSchemas(prev, currentSchema);
-                browser.storage.local.set({prevSchema: currentSchema}).then(() => {
-                    sendResponse({result: `Schema Changes:<br>${diff || 'No changes'}`});
+                const prev = JSON.parse(result.prevSchema || '{}');
+                const diff = compareEnhancedSchemas(prev, currentSchema);
+                browser.storage.local.set({prevSchema: JSON.stringify(currentSchema)}).then(() => {
+                    sendResponse({
+                        result: `Enhanced Schema Changes:<br>${JSON.stringify(diff, null, 2)}`
+                    });
                 });
             });
             return true;
@@ -192,18 +321,41 @@ browser.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     return true;
 });
 
-function compareSchemas(prev, curr) {
-    const p = JSON.parse(prev), c = JSON.parse(curr);
-    let changes = '';
-    for (let dt in c) {
-        if (!p[dt]) changes += `Added DocType: ${dt}<br>`;
-        else {
-            for (let f in c[dt]) {
-                if (!p[dt][f]) changes += `Added field ${f} to ${dt}<br>`;
-                else if (JSON.stringify(p[dt][f]) !== JSON.stringify(c[dt][f])) 
-                    changes += `Modified ${f} in ${dt}<br>`;
-            }
+function compareEnhancedSchemas(prev, curr) {
+    const changes = {
+        docTypes: {
+            added: curr.docTypes.filter(dt => !prev.docTypes?.includes(dt)),
+            removed: (prev.docTypes || []).filter(dt => !curr.docTypes.includes(dt))
+        },
+        customFields: compareObjects(prev.customFields, curr.customFields, 'Custom Fields'),
+        propertySetters: compareObjects(prev.propertySetters, curr.propertySetters, 'Property Setters'),
+        customScripts: compareObjects(prev.customScripts, curr.customScripts, 'Custom Scripts')
+    };
+    return changes;
+}
+
+function compareObjects(prev = {}, curr = {}, type) {
+    const changes = {
+        added: [],
+        modified: [],
+        removed: []
+    };
+
+    // Check for additions and modifications
+    for (const key in curr) {
+        if (!prev[key]) {
+            changes.added.push(key);
+        } else if (JSON.stringify(prev[key]) !== JSON.stringify(curr[key])) {
+            changes.modified.push(key);
         }
     }
+
+    // Check for removals
+    for (const key in prev) {
+        if (!curr[key]) {
+            changes.removed.push(key);
+        }
+    }
+
     return changes;
 }

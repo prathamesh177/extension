@@ -3,22 +3,85 @@
 <head>
     <title>ERPNext Dev Suite</title>
     <style>
-        body { width: 400px; padding: 10px; font-family: Arial, sans-serif; }
-        .button { padding: 8px; margin: 5px; background-color: #008CBA; color: white; border: none; cursor: pointer; }
-        .section { margin: 10px 0; }
+        body { 
+            width: 400px; 
+            padding: 10px; 
+            font-family: Arial, sans-serif;
+        }
+        .button { 
+            padding: 8px; 
+            margin: 5px; 
+            background-color: #008CBA; 
+            color: white; 
+            border: none; 
+            cursor: pointer;
+            border-radius: 4px;
+            width: calc(50% - 10px);
+        }
+        .button:hover {
+            background-color: #005f7f;
+        }
+        .section { 
+            margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .section-title {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            margin: 5px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        #result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .input-group {
+            width: 100%;
+            margin: 5px 0;
+        }
+        .input-group input {
+            width: calc(100% - 16px);
+            padding: 8px;
+            margin: 4px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <h3>ERPNext Developer Suite</h3>
     
     <div class="section">
-        <button id="erpStock" class="button">Stock Analyzer</button>
-        <button id="erpWorkflow" class="button">Workflow Visualizer</button>
-        <button id="erpReport" class="button">Report Generator</button>
+        <div class="section-title">DocType Tools</div>
+        <div class="input-group">
+            <input type="text" id="doctypeInput" placeholder="Enter DocType name (e.g. 'Item', 'Sales Order')">
+        </div>
+        <button id="inspectDocType" class="button">Inspect DocType</button>
+        <button id="schemaDiff" class="button">Schema Diff</button>
     </div>
     
     <div class="section">
-        <button id="schemaDiff" class="button">Schema Diff</button>
+        <div class="section-title">Development Tools</div>
+        <button id="apiExplorer" class="button">API Explorer</button>
+        <button id="debugConsole" class="button">Debug Console</button>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Business Tools</div>
+        <button id="erpStock" class="button">Stock Analyzer</button>
+        <button id="erpWorkflow" class="button">Workflow Visualizer</button>
+        <button id="erpReport" class="button">Report Generator</button>
     </div>
     
     <div id="result"></div>
